@@ -1,7 +1,8 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma, WorkItem, WorkItemStatus } from '../generated/prisma/client';
+import { Prisma, WorkItem } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
+import { WorkItemStatus } from './types/work-item-status';
 import { WorkItemsService } from './work-items.service';
 
 describe('WorkItemsService', () => {
@@ -25,6 +26,10 @@ describe('WorkItemsService', () => {
     analysisAttemptCount: 0,
     createdAt: new Date('2026-09-05T00:00:00.000Z'),
     updatedAt: new Date('2026-09-05T00:00:00.000Z'),
+  };
+  const analysingWorkItem: WorkItem = {
+    ...workItem,
+    status: WorkItemStatus.ANALYSING,
   };
 
   it('creates a work item', async () => {
@@ -115,6 +120,42 @@ describe('WorkItemsService', () => {
     expect(prisma.workItem.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: 'desc' },
     });
+  });
+
+  it('updates status when the transition is allowed', async () => {
+    const prisma = {
+      workItem: {
+        findUnique: jest.fn().mockResolvedValue(workItem),
+        update: jest.fn().mockResolvedValue(analysingWorkItem),
+      },
+    } as unknown as PrismaService;
+    const service = new WorkItemsService(prisma);
+
+    await expect(
+      service.updateStatus(workItem.id, WorkItemStatus.ANALYSING),
+    ).resolves.toEqual(analysingWorkItem);
+    expect(prisma.workItem.update).toHaveBeenCalledWith({
+      where: { id: workItem.id },
+      data: { status: WorkItemStatus.ANALYSING },
+    });
+  });
+
+  it('throws 409 when the status transition is not allowed', async () => {
+    const prisma = {
+      workItem: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...workItem,
+          status: WorkItemStatus.COMPLETED,
+        }),
+        update: jest.fn(),
+      },
+    } as unknown as PrismaService;
+    const service = new WorkItemsService(prisma);
+
+    await expect(
+      service.updateStatus(workItem.id, WorkItemStatus.ANALYSING),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.workItem.update).not.toHaveBeenCalled();
   });
 
   it('throws 404 when a work item is missing', async () => {

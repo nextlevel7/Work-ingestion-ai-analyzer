@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma, WorkItem } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
+import { WorkItemStatus } from './types/work-item-status';
 
 @Injectable()
 export class WorkItemsService {
@@ -57,6 +58,21 @@ export class WorkItemsService {
     return workItem;
   }
 
+  async updateStatus(id: string, status: WorkItemStatus): Promise<WorkItem> {
+    const workItem = await this.findOne(id);
+
+    if (!this.canUpdateStatus(workItem.status, status)) {
+      throw new ConflictException(
+        `Cannot move work item from ${workItem.status} to ${status}`,
+      );
+    }
+
+    return this.prisma.workItem.update({
+      where: { id },
+      data: { status },
+    });
+  }
+
   private isUniqueConflict(
     error: unknown,
   ): error is Prisma.PrismaClientKnownRequestError {
@@ -71,5 +87,28 @@ export class WorkItemsService {
       workItem.title === dto.title &&
       workItem.description === dto.description
     );
+  }
+
+  private canUpdateStatus(from: string, to: WorkItemStatus): boolean {
+    if (from === WorkItemStatus.RECEIVED) {
+      return to === WorkItemStatus.ANALYSING;
+    }
+
+    if (from === WorkItemStatus.ANALYSING) {
+      return (
+        to === WorkItemStatus.READY_FOR_REVIEW ||
+        to === WorkItemStatus.FAILED
+      );
+    }
+
+    if (from === WorkItemStatus.READY_FOR_REVIEW) {
+      return to === WorkItemStatus.COMPLETED;
+    }
+
+    if (from === WorkItemStatus.FAILED) {
+      return to === WorkItemStatus.ANALYSING;
+    }
+
+    return false;
   }
 }

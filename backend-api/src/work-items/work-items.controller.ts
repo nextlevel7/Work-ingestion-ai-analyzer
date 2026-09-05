@@ -4,6 +4,7 @@ import {
   Get,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Res,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import {
 import { Response } from 'express';
 import { WorkItem } from '../generated/prisma/client';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
+import { UpdateWorkItemStatusDto } from './dto/update-work-item-status.dto';
 import { WorkItemResponseDto } from './dto/work-item-response.dto';
 import { WorkItemsService } from './work-items.service';
 
@@ -49,5 +51,14 @@ export class WorkItemsController {
   @ApiOkResponse({ type: WorkItemResponseDto })
   findOne(@Param('id') id: string): Promise<WorkItem> {
     return this.workItemsService.findOne(id);
+  }
+
+  @Patch(':id/status')
+  @ApiOkResponse({ type: WorkItemResponseDto })
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateWorkItemStatusDto,
+  ): Promise<WorkItem> {
+    return this.workItemsService.updateStatus(id, dto.status);
   }
 }

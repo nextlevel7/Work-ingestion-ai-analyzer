@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WorkItemStatus } from '../../generated/prisma/client';
+import { WorkItemStatus } from '../types/work-item-status';
 
 export class WorkItemResponseDto {
   @ApiProperty({
