@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { WorkItem } from '../types/work-item';
 import { WorkItemStatus } from '../types/work-item-status';
 
-export class WorkItemResponseDto {
+export class WorkItemResponseDto implements WorkItem {
   @ApiProperty({
     example: '9dd05a52-e447-4db7-a9c3-0b66f9ca57e9',
     format: 'uuid',

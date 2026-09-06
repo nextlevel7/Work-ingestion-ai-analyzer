@@ -4,11 +4,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, WorkItem } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { AiService } from '../ai/ai.service';
 import { AiProviderError } from '../ai/errors/ai.errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
+import type { WorkItem } from './types/work-item';
 import { WorkItemStatus } from './types/work-item-status';
 
 @Injectable()
@@ -25,7 +26,11 @@ export class WorkItemsService {
   ): Promise<{ created: boolean; workItem: WorkItem }> {
     try {
       const workItem = await this.prisma.workItem.create({
-        data: dto,
+        data: {
+          externalId: dto.externalId,
+          title: dto.title,
+          description: dto.description,
+        },
       });
 
       return { created: true, workItem };
@@ -42,12 +47,7 @@ export class WorkItemsService {
         throw error;
       }
 
-      if (!this.hasSameContent(workItem, dto)) {
-        throw new ConflictException(
-          'Work item already exists with different title or description',
-        );
-      }
-
+      // The first successful insert wins; repeated IDs never update the item.
       return { created: false, workItem };
     }
   }
@@ -190,13 +190,6 @@ export class WorkItemsService {
     );
   }
 
-  private hasSameContent(workItem: WorkItem, dto: CreateWorkItemDto): boolean {
-    return (
-      workItem.title === dto.title &&
-      workItem.description === dto.description
-    );
-  }
-
   private getErrorMessage(error: unknown): string {
     return error instanceof AiProviderError
       ? error.message
@@ -211,7 +204,7 @@ export class WorkItemsService {
     return error instanceof Error ? error.stack : undefined;
   }
 
-  private canUpdateStatus(from: string, to: WorkItemStatus): boolean {
+  private canUpdateStatus(from: WorkItemStatus, to: WorkItemStatus): boolean {
     return (
       from === WorkItemStatus.READY_FOR_REVIEW &&
       to === WorkItemStatus.COMPLETED

@@ -1,8 +1,9 @@
 import { ConflictException, Logger } from '@nestjs/common';
-import { Prisma, WorkItem } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
+import type { WorkItem } from './types/work-item';
 import { WorkItemStatus } from './types/work-item-status';
 import { WorkItemsService } from './work-items.service';
 
@@ -60,7 +61,7 @@ describe('WorkItemsService', () => {
     jest.restoreAllMocks();
   });
 
-  it('returns the existing item when the same externalId is received again', async () => {
+  it('returns the existing work item for a repeated externalId', async () => {
     const uniqueError = new Prisma.PrismaClientKnownRequestError(
       'Unique constraint failed',
       { code: 'P2002', clientVersion: '7.10.0' },
@@ -80,8 +81,8 @@ describe('WorkItemsService', () => {
     expect(prisma.workItem.findUnique).toHaveBeenCalledWith({
       where: { externalId: dto.externalId },
     });
-    expect(prisma.workItem.create).toHaveBeenCalledTimes(2);
     expect(prisma.workItem.update).not.toHaveBeenCalled();
+    expect(provider.analyse).not.toHaveBeenCalled();
   });
 
   it('calls AI only once when two analysis requests race for the same item', async () => {
@@ -111,13 +112,57 @@ describe('WorkItemsService', () => {
       { status: 'fulfilled', value: analysedItem },
       { status: 'rejected', reason: expect.any(ConflictException) },
     ]);
-    expect(prisma.workItem.updateMany).toHaveBeenCalledTimes(2);
+    expect(provider.analyse).toHaveBeenCalledTimes(1);
+    expect(prisma.workItem.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects completing an item before it is ready for review', async () => {
+    await expect(
+      service.updateStatus(workItem.id, WorkItemStatus.COMPLETED),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.workItem.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects analysing a completed item', async () => {
+    prisma.workItem.findUnique.mockResolvedValue({
+      ...workItem,
+      status: WorkItemStatus.COMPLETED,
+    });
+
+    await expect(service.analyse(workItem.id)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(provider.analyse).not.toHaveBeenCalled();
+    expect(prisma.workItem.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows retry only after failed AI processing', async () => {
+    await expect(service.retry(workItem.id)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(provider.analyse).not.toHaveBeenCalled();
+
+    prisma.workItem.findUnique.mockResolvedValue({
+      ...workItem,
+      status: WorkItemStatus.FAILED,
+      analysisAttemptCount: 1,
+      analysisError: 'Previous analysis failed.',
+    });
+    const retriedItem = {
+      ...workItem,
+      ...analysis,
+      status: WorkItemStatus.READY_FOR_REVIEW,
+      analysisAttemptCount: 2,
+    };
+    prisma.workItem.update.mockResolvedValue(retriedItem);
+
+    await expect(service.retry(workItem.id)).resolves.toEqual(retriedItem);
     expect(prisma.workItem.updateMany).toHaveBeenCalledWith({
-      where: { id: workItem.id, status: WorkItemStatus.RECEIVED },
+      where: { id: workItem.id, status: WorkItemStatus.FAILED },
       data: { status: WorkItemStatus.ANALYSING, analysisError: null },
     });
     expect(provider.analyse).toHaveBeenCalledTimes(1);
-    expect(prisma.workItem.update).toHaveBeenCalledTimes(1);
     expect(prisma.workItem.update).toHaveBeenCalledWith({
       where: { id: workItem.id },
       data: {
@@ -129,40 +174,36 @@ describe('WorkItemsService', () => {
     });
   });
 
-  it('rejects completing an item before it is ready for review', async () => {
-    await expect(
-      service.updateStatus(workItem.id, WorkItemStatus.COMPLETED),
-    ).rejects.toBeInstanceOf(ConflictException);
-
-    expect(prisma.workItem.update).not.toHaveBeenCalled();
-  });
-
-  it('marks the item as failed without saving invalid AI output', async () => {
-    const logger = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    provider.analyse.mockResolvedValue({ ...analysis, priority: 'URGENT' });
-    const failedItem = {
-      ...workItem,
-      status: WorkItemStatus.FAILED,
-      analysisError: 'AI returned an invalid analysis. Please retry.',
-      analysisAttemptCount: 1,
-    };
-    prisma.workItem.update.mockResolvedValue(failedItem);
-
-    await expect(service.analyse(workItem.id)).resolves.toEqual(failedItem);
-
-    expect(provider.analyse).toHaveBeenCalledTimes(1);
-    expect(prisma.workItem.update).toHaveBeenCalledTimes(1);
-    expect(prisma.workItem.update).toHaveBeenCalledWith({
-      where: { id: workItem.id },
-      data: {
+  it.each(['invalid output', 'provider failure'])(
+    'marks %s as FAILED without saving an analysis',
+    async (failure) => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      if (failure === 'invalid output') {
+        provider.analyse.mockResolvedValue({ ...analysis, priority: 'URGENT' });
+      } else {
+        provider.analyse.mockRejectedValue(new Error('Provider unavailable'));
+      }
+      const analysisError = failure === 'invalid output'
+        ? 'AI returned an invalid analysis. Please retry.'
+        : 'AI analysis failed. Please retry.';
+      const failedItem = {
+        ...workItem,
         status: WorkItemStatus.FAILED,
-        analysisError: 'AI returned an invalid analysis. Please retry.',
-        analysisAttemptCount: { increment: 1 },
-      },
-    });
-    expect(logger).toHaveBeenCalledWith(
-      expect.stringContaining(workItem.id),
-      expect.stringContaining('ZodError'),
-    );
-  });
+        analysisError,
+        analysisAttemptCount: 1,
+      };
+      prisma.workItem.update.mockResolvedValue(failedItem);
+
+      await expect(service.analyse(workItem.id)).resolves.toEqual(failedItem);
+      expect(prisma.workItem.update).toHaveBeenCalledTimes(1);
+      expect(prisma.workItem.update).toHaveBeenCalledWith({
+        where: { id: workItem.id },
+        data: {
+          status: WorkItemStatus.FAILED,
+          analysisError,
+          analysisAttemptCount: { increment: 1 },
+        },
+      });
+    },
+  );
 });

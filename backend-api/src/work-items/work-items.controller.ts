@@ -9,15 +9,17 @@ import {
   Res,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
-import { WorkItem } from '../generated/prisma/client';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemStatusDto } from './dto/update-work-item-status.dto';
 import { WorkItemResponseDto } from './dto/work-item-response.dto';
+import type { WorkItem } from './types/work-item';
 import { WorkItemsService } from './work-items.service';
 
 @ApiTags('Work Items')
@@ -26,8 +28,19 @@ export class WorkItemsController {
   constructor(private readonly workItemsService: WorkItemsService) {}
 
   @Post()
-  @ApiCreatedResponse({ type: WorkItemResponseDto })
-  @ApiOkResponse({ type: WorkItemResponseDto })
+  @ApiOperation({
+    description:
+      'The first successful insert for an externalId wins. Repeated IDs return the current item without changing its content, status, or analysis.',
+  })
+  @ApiCreatedResponse({
+    type: WorkItemResponseDto,
+    description: 'New work item created in RECEIVED.',
+  })
+  @ApiOkResponse({
+    type: WorkItemResponseDto,
+    description: 'Existing submission returned in its current state.',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid ingestion fields.' })
   async create(
     @Body() dto: CreateWorkItemDto,
     @Res({ passthrough: true }) response: Response,
