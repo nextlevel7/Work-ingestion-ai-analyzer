@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { Equals } from 'class-validator';
 import { WorkItemStatus } from '../types/work-item-status';
 
 export class UpdateWorkItemStatusDto {
   @ApiProperty({
-    enum: WorkItemStatus,
-    example: WorkItemStatus.ANALYSING,
+    enum: [WorkItemStatus.COMPLETED],
+    example: WorkItemStatus.COMPLETED,
   })
-  @IsEnum(WorkItemStatus)
+  @Equals(WorkItemStatus.COMPLETED)
   status!: WorkItemStatus;
 }

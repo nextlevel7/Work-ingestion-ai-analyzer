@@ -61,4 +61,16 @@ export class WorkItemsController {
   ): Promise<WorkItem> {
     return this.workItemsService.updateStatus(id, dto.status);
   }
+
+  @Post(':id/analyse')
+  @ApiOkResponse({ type: WorkItemResponseDto })
+  analyse(@Param('id') id: string): Promise<WorkItem> {
+    return this.workItemsService.analyse(id);
+  }
+
+  @Post(':id/retry')
+  @ApiOkResponse({ type: WorkItemResponseDto })
+  retry(@Param('id') id: string): Promise<WorkItem> {
+    return this.workItemsService.retry(id);
+  }
 }

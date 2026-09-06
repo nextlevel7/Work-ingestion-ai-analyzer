@@ -1,12 +1,24 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, WorkItem } from '../generated/prisma/client';
+import { AiService } from '../ai/ai.service';
+import { AiProviderError } from '../ai/errors/ai.errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { WorkItemStatus } from './types/work-item-status';
 
 @Injectable()
 export class WorkItemsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(WorkItemsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService,
+  ) {}
 
   async create(
     dto: CreateWorkItemDto,
@@ -73,6 +85,102 @@ export class WorkItemsService {
     });
   }
 
+  async analyse(id: string): Promise<WorkItem> {
+    const workItem = await this.findOne(id);
+
+    if (workItem.status !== WorkItemStatus.RECEIVED) {
+      throw new ConflictException(
+        `Only RECEIVED items can be analysed. Current status is ${workItem.status}`,
+      );
+    }
+
+    return this.runAnalysis(workItem, WorkItemStatus.RECEIVED);
+  }
+
+  async retry(id: string): Promise<WorkItem> {
+    const workItem = await this.findOne(id);
+
+    if (workItem.status !== WorkItemStatus.FAILED) {
+      throw new ConflictException(
+        `Only FAILED items can be retried. Current status is ${workItem.status}`,
+      );
+    }
+
+    return this.runAnalysis(workItem, WorkItemStatus.FAILED);
+  }
+
+  private async runAnalysis(
+    workItem: WorkItem,
+    expectedStatus: WorkItemStatus,
+  ): Promise<WorkItem> {
+    const started = await this.startAnalysisIfStatusMatches(
+      workItem.id,
+      expectedStatus,
+    );
+
+    if (!started) {
+      const currentWorkItem = await this.findOne(workItem.id);
+
+      throw new ConflictException(
+        `Cannot start analysis from status ${currentWorkItem.status}`,
+      );
+    }
+
+    try {
+      const result = await this.aiService.analyse({
+        title: workItem.title,
+        description: workItem.description,
+      });
+
+      return this.prisma.workItem.update({
+        where: { id: workItem.id },
+        data: {
+          status: WorkItemStatus.READY_FOR_REVIEW,
+          category: result.category,
+          priority: result.priority,
+          summary: result.summary,
+          recommendedAction: result.recommendedAction,
+          analysisError: null,
+          analysisAttemptCount: { increment: 1 },
+        },
+      });
+    } catch (error) {
+      const analysisError = this.getErrorMessage(error);
+
+      this.logger.error(
+        `AI analysis failed for work item ${workItem.id}: ${analysisError}`,
+        this.getErrorStack(error),
+      );
+
+      return this.prisma.workItem.update({
+        where: { id: workItem.id },
+        data: {
+          status: WorkItemStatus.FAILED,
+          analysisError,
+          analysisAttemptCount: { increment: 1 },
+        },
+      });
+    }
+  }
+
+  private async startAnalysisIfStatusMatches(
+    id: string,
+    expectedStatus: WorkItemStatus,
+  ): Promise<boolean> {
+    const result = await this.prisma.workItem.updateMany({
+      where: {
+        id,
+        status: expectedStatus,
+      },
+      data: {
+        status: WorkItemStatus.ANALYSING,
+        analysisError: null,
+      },
+    });
+
+    return result.count === 1;
+  }
+
   private isUniqueConflict(
     error: unknown,
   ): error is Prisma.PrismaClientKnownRequestError {
@@ -89,26 +197,24 @@ export class WorkItemsService {
     );
   }
 
+  private getErrorMessage(error: unknown): string {
+    return error instanceof AiProviderError
+      ? error.message
+      : 'AI analysis failed. Please retry.';
+  }
+
+  private getErrorStack(error: unknown): string | undefined {
+    if (error instanceof AiProviderError && error.cause instanceof Error) {
+      return error.cause.stack;
+    }
+
+    return error instanceof Error ? error.stack : undefined;
+  }
+
   private canUpdateStatus(from: string, to: WorkItemStatus): boolean {
-    if (from === WorkItemStatus.RECEIVED) {
-      return to === WorkItemStatus.ANALYSING;
-    }
-
-    if (from === WorkItemStatus.ANALYSING) {
-      return (
-        to === WorkItemStatus.READY_FOR_REVIEW ||
-        to === WorkItemStatus.FAILED
-      );
-    }
-
-    if (from === WorkItemStatus.READY_FOR_REVIEW) {
-      return to === WorkItemStatus.COMPLETED;
-    }
-
-    if (from === WorkItemStatus.FAILED) {
-      return to === WorkItemStatus.ANALYSING;
-    }
-
-    return false;
+    return (
+      from === WorkItemStatus.READY_FOR_REVIEW &&
+      to === WorkItemStatus.COMPLETED
+    );
   }
 }
