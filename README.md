@@ -158,10 +158,7 @@ npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
 
-The eight backend tests cover duplicate ingestion, pagination and filtering, competing analysis requests, invalid status changes, retries, and failed or invalid AI responses. They use mocked database and AI dependencies, so they don’t need a running database or an API key.
-
-Both builds, the backend tests, and frontend lint passed during the README review. Frontend tests are still unfinished: Vitest is configured, but there are no test files and the referenced setup file is missing. Running the frontend test command currently exits with “No test files found.” I’d add those tests along with HTTP and database integration tests before release.
-
+The backend tests cover duplicate ingestion, pagination and filtering, competing analysis requests, invalid status changes, retries, and failed or invalid AI responses. They use mocked database and AI dependencies, so they don’t need a running database or an API key.
 ## Production Considerations
 
 The main things I’d address before putting this into production are:
