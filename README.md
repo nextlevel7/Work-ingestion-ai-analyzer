@@ -183,4 +183,4 @@ One suggestion I rejected was adding Redis-backed jobs and long polling for the 
 - **GitHub Repository:** [nextlevel7/Work-ingestion-ai-analyzer](https://github.com/nextlevel7/Work-ingestion-ai-analyzer)
 - **Backend Language:** TypeScript (Node.js / NestJS)
 - **LLM Provider / Mock Used:** Mock by default, with optional OpenAI (`gpt-5-mini`).
-- **Approximate Time Spent:** ~3.5 hours
+- **Approximate Time Spent:** ~ 3 hours
