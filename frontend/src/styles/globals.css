@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@layer base {
+  h2 { @apply text-lg font-semibold; }
+  h3 { @apply font-semibold; }
+  label { @apply grid gap-1.5 text-sm font-medium text-slate-700; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-blue-600; }
+  :disabled { @apply cursor-not-allowed opacity-60; }
+}
+
+@layer components {
+  .panel { @apply min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-xs; }
+  .muted { @apply text-sm font-normal text-slate-500; }
+
+  .control {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-xs outline-none transition-colors;
+    @apply hover:border-slate-400 focus:border-blue-500 focus:ring-3 focus:ring-blue-100 disabled:bg-slate-100;
+  }
+  select.control {
+    @apply cursor-pointer appearance-none pr-10;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364758b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E") no-repeat right 0.75rem center;
+    background-color: white;
+  }
+  textarea.control { @apply resize-y; }
+
+  .btn {
+    @apply cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium shadow-xs transition-colors enabled:hover:bg-slate-50;
+  }
+  .btn-primary { @apply border-blue-600 bg-blue-600 text-white enabled:hover:bg-blue-700; }
+  .btn:disabled, .control:disabled { @apply cursor-not-allowed; }
+
+  .notice { @apply rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm; }
+  .notice p { @apply mt-1; }
+  .notice-success { @apply border-green-200 bg-green-50 text-green-800; }
+  .notice-error { @apply border-red-200 bg-red-50 text-red-800; }
+
+  .work-item {
+    @apply grid w-full cursor-pointer gap-2 rounded-lg border border-slate-200 p-4 text-left wrap-anywhere transition-colors hover:bg-slate-50;
+  }
+  .work-item[aria-pressed='true'] { @apply border-blue-500 bg-blue-50; }
+}
