@@ -9,7 +9,7 @@
 }
 
 @layer components {
-  .panel { @apply min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-xs; }
+  .panel { @apply min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm; }
   .muted { @apply text-sm font-normal text-slate-500; }
 
   .control {
@@ -35,7 +35,7 @@
   .notice-error { @apply border-red-200 bg-red-50 text-red-800; }
 
   .work-item {
-    @apply grid w-full cursor-pointer gap-2 rounded-lg border border-slate-200 p-4 text-left wrap-anywhere transition-colors hover:bg-slate-50;
+    @apply grid h-40 w-full cursor-pointer grid-rows-[auto_auto_1fr_auto] gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-slate-300 hover:bg-slate-50;
   }
-  .work-item[aria-pressed='true'] { @apply border-blue-500 bg-blue-50; }
+  .work-item[aria-pressed='true'] { @apply border-blue-500 bg-blue-50 ring-1 ring-blue-500; }
 }

@@ -72,3 +72,20 @@ export class WorkItemResponseDto implements WorkItem {
   })
   updatedAt!: Date;
 }
+
+export class WorkItemPageResponseDto {
+  @ApiProperty({ type: [WorkItemResponseDto] })
+  items!: WorkItemResponseDto[];
+
+  @ApiProperty({ example: 25 })
+  total!: number;
+
+  @ApiProperty({ example: 1 })
+  page!: number;
+
+  @ApiProperty({ example: 10 })
+  pageSize!: number;
+
+  @ApiProperty({ example: 3 })
+  totalPages!: number;
+}

@@ -42,3 +42,17 @@ export interface WorkItem {
   createdAt: string
   updatedAt: string
 }
+
+export interface WorkItemPage {
+  items: WorkItem[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface WorkItemFilters {
+  page: number
+  pageSize: number
+  status?: WorkItemStatus
+}

@@ -23,11 +23,11 @@ export function AnalysisResult({ item }: { item: WorkItem }) {
       )}
       {(item.status === 'READY_FOR_REVIEW' || item.status === 'COMPLETED') && (
         <>
-          <dl className="grid gap-4">
-            <div><dt className="muted mb-1">Category</dt><dd className="m-0">{item.category || 'Not provided'}</dd></div>
-            <div><dt className="muted mb-1">Priority</dt><dd className="m-0">{item.priority || 'Not provided'}</dd></div>
-            <div><dt className="muted mb-1">Summary</dt><dd className="whitespace-pre-wrap wrap-anywhere">{item.summary || 'Not provided'}</dd></div>
-            <div><dt className="muted mb-1">Recommended action</dt><dd className="whitespace-pre-wrap wrap-anywhere">{item.recommendedAction || 'Not provided'}</dd></div>
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg bg-slate-50 p-3"><dt className="muted mb-1">Category</dt><dd>{item.category || 'Not provided'}</dd></div>
+            <div className="rounded-lg bg-slate-50 p-3"><dt className="muted mb-1">Priority</dt><dd>{item.priority || 'Not provided'}</dd></div>
+            <div className="sm:col-span-2"><dt className="muted mb-1">Summary</dt><dd className="whitespace-pre-wrap wrap-anywhere">{item.summary || 'Not provided'}</dd></div>
+            <div className="sm:col-span-2"><dt className="muted mb-1">Recommended action</dt><dd className="whitespace-pre-wrap wrap-anywhere">{item.recommendedAction || 'Not provided'}</dd></div>
           </dl>
           {item.status === 'READY_FOR_REVIEW' && <p>Review the AI results and carry out any required action before completing this item.</p>}
         </>

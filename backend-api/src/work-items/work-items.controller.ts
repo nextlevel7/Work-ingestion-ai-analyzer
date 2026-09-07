@@ -1,11 +1,15 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
   HttpStatus,
   Param,
   Patch,
+  ParseEnumPipe,
+  ParseIntPipe,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import {
@@ -13,13 +17,18 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemStatusDto } from './dto/update-work-item-status.dto';
-import { WorkItemResponseDto } from './dto/work-item-response.dto';
+import {
+  WorkItemPageResponseDto,
+  WorkItemResponseDto,
+} from './dto/work-item-response.dto';
 import type { WorkItem } from './types/work-item';
+import { WorkItemStatus } from './types/work-item-status';
 import { WorkItemsService } from './work-items.service';
 
 @ApiTags('Work Items')
@@ -52,12 +61,34 @@ export class WorkItemsController {
   }
 
   @Get()
-  @ApiOkResponse({
-    type: WorkItemResponseDto,
-    isArray: true,
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number, starting at 1.',
   })
-  findAll(): Promise<WorkItem[]> {
-    return this.workItemsService.findAll();
+  @ApiQuery({
+    name: 'pageSize',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Items per page. Maximum 50.',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: WorkItemStatus,
+    description: 'Only return work items with this status.',
+  })
+  @ApiOkResponse({ type: WorkItemPageResponseDto })
+  findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) pageSize: number,
+    @Query('status', new ParseEnumPipe(WorkItemStatus, { optional: true }))
+    status?: WorkItemStatus,
+  ) {
+    return this.workItemsService.findAll(page, pageSize, status);
   }
 
   @Get(':id')

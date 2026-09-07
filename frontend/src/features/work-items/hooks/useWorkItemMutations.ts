@@ -2,7 +2,7 @@ import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-q
 import type { QueryClient } from '@tanstack/react-query'
 import * as api from '../api/work-items.api'
 import { workItemKeys } from '../query-keys'
-import type { WorkItem, WorkItemAction } from '../types/work-item'
+import type { WorkItem, WorkItemAction, WorkItemPage } from '../types/work-item'
 
 interface ActionInput {
   id: string
@@ -18,10 +18,13 @@ const operations = {
 async function refreshAfterSave(client: QueryClient, savedItem: WorkItem) {
   // Cancel older reads before caching the saved item.
   await client.cancelQueries({ queryKey: workItemKeys.all })
-  client.setQueryData<WorkItem[]>(workItemKeys.list, (items) =>
-    [savedItem, ...(items ?? []).filter((item) => item.id !== savedItem.id)]
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
-  )
+  client.setQueriesData<WorkItemPage>({ queryKey: workItemKeys.lists }, (data) => {
+    if (!data?.items.some((item) => item.id === savedItem.id)) return data
+    return {
+      ...data,
+      items: data.items.map((item) => item.id === savedItem.id ? savedItem : item),
+    }
+  })
   // A failed refresh must not turn a successful save into a mutation error.
   await client.invalidateQueries({ queryKey: workItemKeys.all }, { throwOnError: false })
 }
@@ -64,13 +67,13 @@ export function useWorkItemActions() {
     .map((action) => action.input.id))
   const byItem = new Map(actions.map((action) => [action.input.id, action]))
 
-  function runAction(id: string, action: WorkItemAction) {
+  function runAction(id: string, action: WorkItemAction, onSuccess?: () => void) {
     // Also guard calls made before the disabled button renders.
     if (client.isMutating({
       mutationKey: workItemKeys.action,
       predicate: (entry) => (entry.state.variables as ActionInput).id === id,
     }) || client.isMutating({ mutationKey: workItemKeys.create })) return
-    mutation.mutate({ id, action })
+    mutation.mutate({ id, action }, { onSuccess })
   }
 
   return { runAction, pendingItemIds, byItem }

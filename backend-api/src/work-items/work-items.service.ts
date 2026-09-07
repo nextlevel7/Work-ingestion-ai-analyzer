@@ -52,10 +52,27 @@ export class WorkItemsService {
     }
   }
 
-  findAll(): Promise<WorkItem[]> {
-    return this.prisma.workItem.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(page = 1, pageSize = 10, status?: WorkItemStatus) {
+    page = Math.max(1, page);
+    pageSize = Math.min(50, Math.max(1, pageSize));
+    const where = status ? { status } : undefined;
+    const [items, total] = await Promise.all([
+      this.prisma.workItem.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.workItem.count({ where }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async findOne(id: string): Promise<WorkItem> {

@@ -45,12 +45,8 @@ export function CreateWorkItemForm({ disabled, isSubmitting, error, onSubmit, on
   }
 
   return (
-    <section id="ingest-form" className="panel mb-6" aria-labelledby="ingest-heading">
-      <h2 id="ingest-heading">Ingest item</h2>
-      <p className="muted mt-2" id="ingest-help">
-        Add incoming work for analysis.
-      </p>
-      <form className="mt-5 grid max-w-2xl gap-4" onSubmit={handleSubmit} aria-describedby="ingest-help" aria-busy={isSubmitting}>
+    <div id="ingest-form">
+      <form className="grid gap-4" onSubmit={handleSubmit} aria-busy={isSubmitting}>
         {(validationError || error) && <ErrorMessage>{validationError || error}</ErrorMessage>}
         <label>
           External ID
@@ -72,6 +68,6 @@ export function CreateWorkItemForm({ disabled, isSubmitting, error, onSubmit, on
         </div>
         {isSubmitting && <p className="muted" role="status">Ingesting item. Please wait.</p>}
       </form>
-    </section>
+    </div>
   )
 }

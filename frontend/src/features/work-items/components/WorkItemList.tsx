@@ -9,7 +9,9 @@ interface WorkItemListProps {
 }
 
 export function WorkItemList({ items, selectedId, emptyMessage, onSelect }: WorkItemListProps) {
-  if (items.length === 0) return <p className="py-7 text-slate-500">{emptyMessage}</p>
+  if (items.length === 0) {
+    return <p className="my-4 rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{emptyMessage}</p>
+  }
 
   return (
     <ul className="grid list-none gap-2.5" aria-label="Work items">
@@ -20,12 +22,13 @@ export function WorkItemList({ items, selectedId, emptyMessage, onSelect }: Work
             aria-pressed={item.id === selectedId}
             onClick={() => onSelect(item.id)}
           >
-            <span className="flex flex-wrap items-center justify-between gap-2">
-              <span className="muted">{item.externalId}</span>
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="muted truncate">{item.externalId}</span>
               <StatusBadge status={item.status} />
             </span>
-            <strong>{item.title}</strong>
-            <span className="muted">Created {new Date(item.createdAt).toLocaleString()}</span>
+            <strong className="truncate">{item.title}</strong>
+            <span className="truncate text-sm text-slate-600">{item.description}</span>
+            <span className="muted">{new Date(item.createdAt).toLocaleDateString()}</span>
           </button>
         </li>
       ))}

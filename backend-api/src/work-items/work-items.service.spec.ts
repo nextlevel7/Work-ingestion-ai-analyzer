@@ -38,6 +38,8 @@ describe('WorkItemsService', () => {
   const prisma = {
     workItem: {
       create: jest.fn(),
+      count: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
@@ -59,6 +61,30 @@ describe('WorkItemsService', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('paginates and filters work items', async () => {
+    prisma.workItem.findMany.mockResolvedValue([workItem]);
+    prisma.workItem.count.mockResolvedValue(11);
+
+    await expect(
+      service.findAll(2, 5, WorkItemStatus.RECEIVED),
+    ).resolves.toEqual({
+      items: [workItem],
+      total: 11,
+      page: 2,
+      pageSize: 5,
+      totalPages: 3,
+    });
+    expect(prisma.workItem.findMany).toHaveBeenCalledWith({
+      where: { status: WorkItemStatus.RECEIVED },
+      orderBy: { createdAt: 'desc' },
+      skip: 5,
+      take: 5,
+    });
+    expect(prisma.workItem.count).toHaveBeenCalledWith({
+      where: { status: WorkItemStatus.RECEIVED },
+    });
   });
 
   it('returns the existing work item for a repeated externalId', async () => {

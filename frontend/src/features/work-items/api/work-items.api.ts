@@ -1,6 +1,6 @@
 
 import { request, sendRequest } from '../../../lib/api-client'
-import type { CreateWorkItemInput, WorkItem } from '../types/work-item'
+import type { CreateWorkItemInput, WorkItem, WorkItemFilters, WorkItemPage } from '../types/work-item'
 
 export async function ingestWorkItem(input: CreateWorkItemInput) {
   const response = await sendRequest('/work-items', {
@@ -12,8 +12,14 @@ export async function ingestWorkItem(input: CreateWorkItemInput) {
   return { item, created: response.status === 201 }
 }
 
-export function getWorkItems(signal?: AbortSignal) {
-  return request<WorkItem[]>('/work-items', { signal })
+export function getWorkItems(filters: WorkItemFilters, signal?: AbortSignal) {
+  const params = new URLSearchParams({
+    page: String(filters.page),
+    pageSize: String(filters.pageSize),
+  })
+  if (filters.status) params.set('status', filters.status)
+
+  return request<WorkItemPage>(`/work-items?${params}`, { signal })
 }
 
 export function analyseWorkItem(id: string) {

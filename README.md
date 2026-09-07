@@ -1,75 +1,189 @@
 # AI Work Intake System
 
+The stack is **NestJS, PostgreSQL, Prisma, and React**, with TypeScript on both sides. It runs with a mock AI provider by default, so it runs without API key.
+
 ## Setup
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js (if you wish to run locally outside Docker)
+### Run with Docker
 
-### How to Install and Run
-From the repository root, run:
+The easiest way to run it is with Docker Compose. You’ll need Docker installed and ports `8000`, `3000`, and `5432` available.
+
 ```sh
+git clone https://github.com/nextlevel7/Work-ingestion-ai-analyzer.git
+cd Work-ingestion-ai-analyzer
+cp .env.example .env
 docker compose up --build
 ```
 
-This command will start:
-- **Postgres Database** (with a persistent volume)
-- **Backend API** (NestJS) at `http://localhost:3000/api`
-- **Frontend SPA** (React/Vite) at `http://localhost:8000`
+Once the services are ready:
 
-The backend container will automatically apply Prisma migrations to the database and generate the client on startup. By default, the application runs using the mock AI provider. 
+- **Application:** http://localhost:8000
+- **API base:** http://localhost:3000/api
+- **Swagger UI:** http://localhost:3000/api/docs
+- **OpenAPI JSON:** http://localhost:3000/api/docs-json
+- **Database health check:** http://localhost:3000/api/health
 
-If you want to use the OpenAI API, you must update the `docker-compose.yml` to change `AI_PROVIDER: mock` to `AI_PROVIDER: openai` and provide your `OPENAI_API_KEY` in the environment.
+This starts PostgreSQL 16, the backend, and the frontend. Prisma client generation and database migrations are handled automatically. Nginx serves the frontend and forwards `/api` requests to the backend.
 
-### Architecture
+To try the flow, ingest an item, select it, click **Analyse item**, and review the result before completing it. The mock returns a fixed category and priority with a shortened version of your description as the summary.
 
-I wanted to keep the architecture clean and modular, focusing on a great developer experience without over-engineering for scale we don't need yet. The application is split into a React frontend and a NestJS backend.
+```sh
+# Stop the application; database data remains in the named volume.
+docker compose down
+```
 
-### Frontend (`/frontend`)
-For the frontend, I went with React 19 and Vite and feature based architecture.
+### Run locally 
 
-- **Feature-Based Structure**: Instead of dumping all my components into one folder and hooks into another, I organized everything by feature (you can see this in `src/features/work-items`). I find that grouping the API calls, types, components, and hooks together by domain makes the codebase way easier to navigate. If I need to change how a work item is handled, I don't have to jump across five different root folders; everything I need is right there in the `work-items` directory.
-- **Why TanStack Query?**: I used TanStack Query (React Query) for data fetching instead of writing messy `useEffect` hooks or bringing in something heavy like Redux. Honestly, managing server state on the client side is a headache, and TanStack Query just handles the hard parts—like caching, loading states, and deduplicating requests—out of the box. Since this is an AI app where a work item's status is updating (moving from `RECEIVED` to `ANALYSING` to `READY_FOR_REVIEW`), having a reliable way to invalidate the cache and refetch data keeps the UI accurate without writing a ton of boilerplate.
+ Use **Node.js 24** and npm. From the repository root, start just the database:
 
-### Backend (`/backend-api`)
-On the backend, I used NestJS and PostgreSQL as database and prisma orm. 
+```sh
+cp .env.example .env
+docker compose up -d postgres
+```
 
-- **Keeping Things Organized with NestJS**: I chose NestJS because I really like the structure it forces on you. The built-in Dependency Injection and module system mean the routing logic stays strictly in the Controllers, and the heavy lifting stays in the Services. It prevents the codebase from turning into a massive file of tangled functions as the business logic grows.And as we use AI for pair programming these days we exactly know where the AI changes were supposed to happen , files and folder are organized efficiently.
-- **The AI Provider Pattern**:,I set up an abstract `AiProvider`. The core business logic doesn't actually know or care if it's talking to OpenAI or a mock service; it just asks the provider to analyze the text. 
+In a backend terminal:
+
+```sh
+cd backend-api
+cp .env.example .env
+npm ci
+npx prisma migrate deploy
+npm run start:dev
+```
+
+
+In another terminal, starting from the repository root:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+
+### Optional: use OpenAI
+
+For local development, update `backend-api/.env` and restart the API:
+
+```dotenv
+AI_PROVIDER=openai
+OPENAI_API_KEY=replace-with-your-own-key
+OPENAI_MODEL=gpt-5-mini
+OPENAI_TIMEOUT_MS=15000
+```
+
+The default model is `gpt-5-mini`, with a 15-second SDK request timeout. Retries can make the overall request take longer.
+
+For Docker, there’s one extra step: Compose currently passes only `DATABASE_URL` to the backend. Add the following under `services.backend.environment`, alongside `DATABASE_URL`. Then set the values in the root `.env` and run `docker compose up --build` again:
+
+```yaml
+AI_PROVIDER: ${AI_PROVIDER:-mock}
+OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-15000}
+```
+Use those on the root .env so that the credentials dont leak, directly adding to compose and pushing the code will expose the key.
+
+## Architecture
+
+I split the app into a React frontend and a NestJS backend. I wanted the structure to be easy to follow, with a clear place for the UI, business rules, and AI integration.
+
+### Frontend
+
+I used React 19, Vite, and Tailwind CSS. Most of the frontend lives in `frontend/src/features/work-items`, which contains the components, hooks, API calls, and types for the work queue. I preferrebly chose the feature based architecture so that the feature related code stays in folder  keeping related code together so a change to one feature doesn’t mean searching across the whole project.
+
+TanStack Query handles fetching and caching. After creating, analysing, or completing an item, the app updates the cache and refreshes the list. Pagination and status filters are handled by the backend. There’s also a manual refresh button; I haven’t added polling.
+
+### Backend
+
+The backend uses NestJS modules for work items, AI, database access, and health checks. Controllers handle requests, while `WorkItemsService` handles the workflow rules. DTOs validate incoming data before it reaches the service.
+
+PostgreSQL stores the work items, and Prisma handles database access and migrations. I kept the data model to one table for this version: it holds the original request, current status, latest AI result, error details, and attempt count.
+
+### AI integration
+
+The AI code sits behind an `AiProvider` interface. The work-item service uses the same flow whether the selected provider is OpenAI or the mock. OpenAI returns structured output, and Zod checks the result before it’s saved.
+
+An item starts as `RECEIVED`. Analysis moves it to `ANALYSING`, then either `READY_FOR_REVIEW` or `FAILED`. A failed item can be retried. Only an item ready for review can be marked `COMPLETED`.
+
+### API
+
+All routes below start with `/api`. You can try them in [Swagger](http://localhost:3000/api/docs).
+
+- `POST /work-items` — submit an external ID, title, and description. Returns `201` for a new item or `200` if the external ID already exists.
+- `GET /work-items` — list items, newest first. Supports `page`, `pageSize`, and an optional `status` filter. Page size defaults to 10 and is capped at 50.
+- `GET /work-items/:id` — get one item.
+- `POST /work-items/:id/analyse` — analyse a received item.
+- `POST /work-items/:id/retry` — retry a failed analysis.
+- `PATCH /work-items/:id/status` — mark a reviewed item complete with `{ "status": "COMPLETED" }`.
+- `GET /health` — check that the API can reach the database.
+
+Invalid input returns `400`, missing items return `404`, and invalid status transitions return `409`. If AI processing fails, the API returns the item with status `FAILED` and an error message, so clients need to check the returned status too.
 
 ## Assumptions
-- **Work Item Size**: It is assumed that incoming work item descriptions and titles fit well within the context window limits of modern LLMs.
-- **Traffic and Concurrency**: It is assumed that for this MVP, the volume of `analyse` requests is manageable through synchronous HTTP calls. 
-- **Data Model Strategy**: Idempotent creation uses the `externalId` to prevent duplicating the same work item if the client retries the creation process.
+
+- I treated this as a shared internal work queue. I haven’t added user accounts or roles for the assessment.
+- The system submitting work provides a stable `externalId`. Submitting the same ID again returns the original item, even if the title or description has changed.
+- Work items contain text only. The limits are 100 characters for the external ID, 200 for the title, and 5,000 for the description.
+- Analysis starts when a user requests it, rather than automatically on ingestion. I assumed the request volume would be low enough for synchronous processing.
+- Someone reviews the AI result and carries out any required action before marking the item complete. The app doesn’t execute the recommendation itself.
+- Keeping the latest analysis and error is enough for this version. There’s an attempt count, but no full history of previous results.
 
 ## Technical Decisions
 
-1. **Handling Duplicates Gracefully (Idempotency)**: I knew that whatever system is submitting these work items might retry requests if there's a network blip. To handle this, I made the `POST /api/work-items` endpoint idempotent using the `externalId`. If the exact same ID is submitted twice, the database throws a unique constraint error. Instead of crashing with a 500 error, my catch block intercepts it and just returns the existing item. It's a simple, bulletproof way to prevent duplicate records without having to do extra database lookups first.
-2. **Keeping AI Processing Synchronous**: I debated setting up a background queue (like BullMQ or Redis) for the AI analysis since LLM calls can take a few seconds. But looking at the requirements—specifically the note about not needing "enterprise-scale infrastructure"—I decided a queue would just be unnecessary overhead for this MVP. Instead, the analysis is triggered synchronously via `POST /api/work-items/:id/analyse`. To ensure we don't accidentally run the analysis twice on the same item, I added a quick optimistic concurrency check (`startAnalysisIfStatusMatches`) that safely locks the status to `ANALYSING` before actually calling the AI. It keeps the stack lean while still being safe.
-3. **Abstracting the AI Integration**: I didn't want the core `AiService` hardcoded to OpenAI's SDK. By putting an abstract `AiProvider` in the middle, the main application logic is completely shielded from the actual LLM implementation. This decision paid off immediately because it allowed me to plug in the `MockAiProvider`. I was able to test the entire frontend, database flow, and state transitions locally without waiting for real LLM responses or worrying about rate limits.
+### 1. Let the database handle duplicate submissions
+
+I made `externalId` unique in PostgreSQL. If an insert hits that constraint, the service returns the existing item. This handles retries and simultaneous submissions without a separate check before inserting. The trade-off is that resubmitting an item won’t correct its content; that would need a separate update flow.
+
+### 2. Keep AI analysis synchronous for now
+
+I considered a background queue, but it felt like extra infrastructure for the size of this assessment. The analysis endpoint waits for the provider and returns the updated item.
+
+Before calling AI, the service updates the status only if it still matches the expected starting state. That prevents two requests from analysing the same item at once. The limitation is recovery: if the backend crashes during analysis, the item can remain stuck in `ANALYSING`. A worker with recoverable jobs would be my next step for production.
+
+### 3. Keep the provider replaceable and check its output
+
+The provider interface lets me run the app with a mock during development and switch to OpenAI through configuration. Both go through the same Zod validation for categories, priorities, and text lengths.
+
+This catches invalid responses, but a correctly formatted answer can still be wrong. That’s why the workflow keeps a human review step.
+
+## Tests
+
+After installing dependencies and setting up the backend `.env`, run these from the repository root:
+
+```sh
+npm --prefix backend-api test
+npm --prefix backend-api run build
+npm --prefix frontend run build
+npm --prefix frontend run lint
+```
+
+The eight backend tests cover duplicate ingestion, pagination and filtering, competing analysis requests, invalid status changes, retries, and failed or invalid AI responses. They use mocked database and AI dependencies, so they don’t need a running database or an API key.
+
+Both builds, the backend tests, and frontend lint passed during the README review. Frontend tests are still unfinished: Vitest is configured, but there are no test files and the referenced setup file is missing. Running the frontend test command currently exits with “No test files found.” I’d add those tests along with HTTP and database integration tests before release.
 
 ## Production Considerations
 
-If we were actually taking this to a live production environment tomorrow, there are a few corners I cut for the sake of the MVP that I'd immediately want to fill in:
+The main things I’d address before putting this into production are:
 
-- **Auth & Access Control**: Right now, the API is wide open. I'd want to drop in an identity provider like Auth0 or AWS Cognito to lock down the endpoints. We'd also need some basic Role-Based Access Control (RBAC) so we can actually control who is allowed to review, accept, or retry the AI's analysis.
-- **Real Background Queues**: I kept the AI analysis synchronous to keep the stack simple for this assessment, but in production, holding HTTP requests open while waiting for OpenAI is a bad idea. I would spin up a Redis instance and use something like BullMQ to offload the AI calls to a background worker. This would give us robust retry logic and protect us if the LLM provider starts rate-limiting us.
-- **Observability & Logging**: When an AI app breaks, it can be really hard to figure out *why* if you don't have good logs. I'd add structured logging (like Winston) to trace requests.
-
-- **Tightening Security**: Using a local `.env` file is fine for testing, but in production, I'd want those API keys and database credentials pulled dynamically from a secure vault like AWS Secrets Manager or HashiCorp Vault. I'd also throw a rate limiter (like Nest's `ThrottlerModule`) on the public routes to prevent anyone from spamming the ingestion endpoint.
+- **Authentication and permissions:** Add login and roles so we can control who submits, analyses, and completes work. I’d also record who made each change.
+- **Background processing:** Move AI calls to a queue with retries, backoff, and a way to recover stuck jobs. The frontend would then need polling or server events for progress updates.
+- **Logging and monitoring:** Add structured logs with request IDs, plus metrics for analysis failures, response times, and stuck items. The current error logs and database health check are a starting point.
+- **Database and scale:** Add indexes based on actual query patterns, move to cursor pagination if the queue grows, and keep a separate history of analysis attempts and review actions. Backups and tested restores would also be necessary.
+- **Security:** Use managed secrets, HTTPS, rate limits, and restricted database access. I’d also review what data can be sent to the LLM and redact sensitive fields where needed.
+- **LLM quality and cost:** Test the prompt against representative work items, track token usage and cost, and set explicit retry and output limits. Schema validation alone won’t catch a misleading recommendation.
 
 ## AI Usage
 
-I definitely took advantage of modern AI tooling to move faster on the boilerplate so I could focus my time on the architecture and business logic.
+I used **Codex and Antigravity CLI** for scaffolding NestJS modules, styling React components, writing swagger documentation codes, tests and discussing the initial Prisma schema. I also used Codex to help edit this README and check it against the code.
 
-- **Tools of Choice**: I mostly used Codex and Antigravity CLI.
-- **How I Used Them**: They were a massive help for scaffolding the initial NestJS modules and getting the React components styled quickly with TailwindCSS. I also used them to bounce ideas around when translating the raw requirements into the initial Prisma schema.
-- **Trust, but Verify**: AI writes code fast, but it's not always right. I made sure to verify everything by relying on the automated tests (Jest on the backend, Vitest on the frontend). I also manually inspected every SQL migration that was generated to ensure the database constraints (like the `externalId` uniqueness) were actually doing what I expected before running them.
-- **Where I Pushed Back**: AI tools have a bad habit of over-engineering things if you aren't careful. At one point, the AI tried to suggest setting up a full Redis queue with long-polling for the analysis endpoint. I explicitly rejected that and went with the simpler synchronous API approach, because building enterprise-scale infrastructure for an MVP just didn't align with the assessment's goals.
+
+One suggestion I rejected was adding Redis-backed jobs and long polling for the analysis flow. I kept the synchronous approach for this assessment and added the conditional status update to prevent duplicate analysis. A queue would make sense once the app needs reliable background processing. A lot of unecessary abstraction and functions were being generated so while building the work item feature i rejected some of those as well and made simpler version more explictly the AI was making a state machine just for our transition state and wrote a simpler version where the external status changers from ready to review to completed only . Other states are just internal states of the application.
 
 ## Submission
-- **Name**: Sujan
-- **GitHub Repository**: (Link to be provided upon push)
-- **Backend Language**: TypeScript (Node.js/NestJS)
-- **LLM Provider / Mock Used**: OpenAI (and Mock Provider for local dev)
-- **Approximate Time Spent**: ~3.5 hours
+
+- **Name:** Sujan Lamichhane
+- **GitHub Repository:** [nextlevel7/Work-ingestion-ai-analyzer](https://github.com/nextlevel7/Work-ingestion-ai-analyzer)
+- **Backend Language:** TypeScript (Node.js / NestJS)
+- **LLM Provider / Mock Used:** Mock by default, with optional OpenAI (`gpt-5-mini`).
+- **Approximate Time Spent:** ~3.5 hours
