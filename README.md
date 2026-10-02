@@ -176,11 +176,3 @@ I used **Codex and Antigravity CLI** for scaffolding NestJS modules, styling Rea
 
 
 One suggestion I rejected was adding Redis-backed jobs and long polling for the analysis flow. I kept the synchronous approach for this assessment and added the conditional status update to prevent duplicate analysis. A queue would make sense once the app needs reliable background processing. A lot of unecessary abstraction and functions were being generated so while building the work item feature i rejected some of those as well and made simpler version more explictly the AI was making a state machine just for our transition state and wrote a simpler version where the external status changers from ready to review to completed only . Other states are just internal states of the application.
-
-## Submission
-
-- **Name:** Sujan Lamichhane
-- **GitHub Repository:** [nextlevel7/Work-ingestion-ai-analyzer](https://github.com/nextlevel7/Work-ingestion-ai-analyzer)
-- **Backend Language:** TypeScript (Node.js / NestJS)
-- **LLM Provider / Mock Used:** Mock by default, with optional OpenAI (`gpt-5-mini`).
-- **Approximate Time Spent:** ~ 3 hours
